@@ -1,0 +1,9 @@
+numpy>=1.26,<3
+pandas>=2.2,<3
+matplotlib>=3.9,<4
+scikit-learn>=1.6,<1.10
+holidays>=0.60,<1
+mlflow>=3.1,<4
+nbconvert>=7.16,<8
+nbclient>=0.10,<1
+ipykernel>=6.29,<8
