@@ -3,6 +3,7 @@ from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -41,7 +42,8 @@ class Part2Test(unittest.TestCase):
                 self.assertNotIn("`", visible, "Inline code was left as raw Markdown")
                 self.assertNotIn("*", visible, "Emphasis was left as raw Markdown")
                 if cell.get("id") == "e8e9ce55":
-                    self.assertEqual(rendered.list_items, 9, "Conclusions and references must be lists")
+                    expected = sum(bool(re.match(r"^(?:\d+\.|-)\s", line)) for line in source.splitlines())
+                    self.assertEqual(rendered.list_items, expected, "Conclusions and references must be lists")
 
     def test_search_tracking_and_registered_pipeline(self):
         notebook = json.loads((ROOT / "practica2_svm.ipynb").read_text(encoding="utf-8"))
@@ -52,7 +54,8 @@ class Part2Test(unittest.TestCase):
                     source.startswith("## Parte 2:") or 'id="parte2"' in source):
                 inside = True
             elif cell["cell_type"] == "markdown" and (
-                    source.startswith("## Conclusiones") or 'id="conclusiones-parte1"' in source):
+                    source.startswith("## Conclusiones") or 'id="conclusiones-parte1"' in source
+                    or 'id="parte3"' in source):
                 inside = False
             elif inside and cell["cell_type"] == "code":
                 cells.append(source)

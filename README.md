@@ -2,7 +2,8 @@
 
 El proyecto estima la demanda diaria de productos con SVR, una SVM para regresión.
 El trabajo está en `practica2_svm.ipynb`; `practica2_svm.html` permite consultar los
-resultados guardados sin ejecutar Python.
+resultados guardados sin ejecutar Python. Las tres partes del cuaderno están
+implementadas: modelo base, optimización y predicción con interpretación.
 
 ## Estado del trabajo
 
@@ -10,7 +11,7 @@ resultados guardados sin ejecutar Python.
 | --- | --- | --- |
 | Parte 1: datos y SVR | Terminada | Preparación de variables, división temporal, comparación de kernels y ajuste de C y épsilon. |
 | Parte 2: optimización con MLflow | Terminada y comprobada | GridSearch, RandomSearch, registro de experimentos y del mejor modelo, comparación de RMSE y tiempo. |
-| Parte 3: predicción e interpretación | Pendiente, a cargo del compañero | Cargar una versión del modelo, predecir dos casos nuevos y explicar sus resultados con SHAP. |
+| Parte 3: predicción e interpretación | Implementada y comprobada | Carga por versión, validación de entradas, dos escenarios ilustrativos y explicaciones SHAP. |
 
 ### Lo que ya está hecho
 
@@ -21,6 +22,10 @@ resultados guardados sin ejecutar Python.
 - [x] Comparar ambas búsquedas en una figura y exportar sus resultados a CSV.
 - [x] Guardar el pipeline completo, con su escalador, como `models:/svr_demanda/1`.
 - [x] Ejecutar el cuaderno completo, comprobar la carga del modelo y actualizar el HTML.
+- [x] Crear `predecir(muestra, version)` sin reentrenar el modelo ni el escalador.
+- [x] Probar dos escenarios, normal y feriado, con sus 22 variables preparadas.
+- [x] Explicar ambos resultados con SHAP y comprobar que los aportes reconstruyen las predicciones.
+- [x] Incorporar conclusiones, referencias de SHAP y exportaciones de la Parte 3.
 
 ### Resultados guardados de la Parte 2
 
@@ -36,10 +41,6 @@ y pueden cambiar según el equipo.
 
 ### Lo que falta hacer
 
-- [ ] Crear `predecir(muestra, version)` para cargar el modelo registrado sin volver a entrenarlo.
-- [ ] Probar la función con dos casos distintos: un día normal y un feriado, con sus variables y rezagos completos.
-- [ ] Explicar las predicciones con SHAP y comentar qué variables influyeron en cada caso.
-- [ ] Incorporar las conclusiones de la Parte 3 y volver a exportar el HTML.
 - [ ] Revisar las referencias APA y confirmar la entrega de los archivos en AVAC y la sustentación.
 
 Antes de cerrar la práctica hay que aclarar con el docente si acepta predecir
@@ -75,6 +76,28 @@ Después de elegir los parámetros se entrena el modelo final con entrenamiento 
 agosto, y se evalúa en septiembre. Ese error de prueba no se usa para seleccionar
 otra configuración.
 
+## Cómo funciona la Parte 1
+
+Primero se cargan los datos, se ordenan por producto y fecha y se calcula el stock
+de cierre. Se preparan las variables de calendario y los rezagos de ventas y
+stock. Los rezagos usan observaciones anteriores al día que se quiere predecir.
+
+El modelo combina `StandardScaler` y `SVR` en un pipeline. Se comparan los kernels
+lineal, RBF y polinomial con C = 10. RBF obtiene RMSE de validación 3,58, frente a
+4,24 del lineal y 3,63 del polinomial. Después se estudian C y épsilon por separado:
+
+| Parámetro | Valores probados en la Parte 1 |
+| --- | --- |
+| C | 0,1; 0,3; 1; 3; 10; 30; 100; 300; 1000 |
+| Épsilon | 0,1; 0,5; 1; 2; 4; 8 |
+
+La configuración elegida en esta etapa es RBF, C = 10 y épsilon = 0,1. Tras ajustar
+con entrenamiento y agosto, obtiene RMSE 3,21 y MAE 2,29 en septiembre. Se compara
+con las ventas del día anterior, las de la semana anterior y las métricas de la
+LSTM de la Práctica 1. La LSTM no se entrena en este notebook: sus métricas se
+incluyen como referencia. Las figuras muestran los kernels, el efecto de C y
+épsilon, y la comparación entre demanda real y predicha.
+
 ## Cómo funciona la Parte 2
 
 Ambas búsquedas usan este espacio de parámetros:
@@ -97,6 +120,69 @@ agosto. El RMSE final de septiembre corresponde al modelo reajustado con
 entrenamiento y agosto. El tiempo de búsqueda incluye `fit`, pero deja fuera la
 creación de figuras y el registro en MLflow.
 
+## Cómo funciona la Parte 3
+
+### Carga por versión y función de predicción
+
+La sección 3.1 lee el nombre y la versión de `resultados/parte2_modelo.json` y
+configura el registro SQLite de la carpeta actual. La sección 3.2 define
+`predecir(muestra, version)`:
+
+- `muestra` es un DataFrame de exactamente una fila, con las columnas del modelo.
+- `version` es un entero positivo. Una cadena, un booleano o un número no entero
+  se rechazan; una versión que no existe conserva el error de MLflow.
+- Las columnas pueden llegar en otro orden: la función usa el orden del pipeline.
+  Rechaza columnas faltantes, adicionales o repetidas, valores no numéricos,
+  ausentes o infinitos y codificaciones que no identifican un único producto.
+- Carga `models:/svr_demanda/<version>` y devuelve la demanda estimada como número
+  decimal. No redondea ni recorta la salida, no entrena y no reajusta el escalador.
+
+Se usan modelos locales generados por el proyecto. Para llamar solo a la función
+en un kernel nuevo bastan las secciones 3.1 y 3.2, el registro local y una muestra
+ya preparada. Los casos y SHAP también necesitan los datos de la Parte 1.
+
+Después de ejecutar 3.1 y 3.2, se puede reutilizar una muestra exportada:
+
+```python
+muestras = pd.read_csv("resultados/parte3_muestras.csv")
+predecir(muestras.drop(columns="caso").iloc[[0]], VERSION_MODELO)
+```
+
+Se elimina `caso` porque es una etiqueta del ejemplo, no una entrada del modelo.
+
+### Casos normal y feriado
+
+Los dos ejemplos corresponden al producto 103665, Pan de Molde Blanco. Usan los
+valores de las últimas siete observaciones disponibles y desplazan sus fechas
+al periodo anterior de cada escenario. `crear_variables`, de la Parte 1, calcula
+el calendario y los rezagos; las columnas de los otros productos quedan en cero.
+La fila nueva no tiene venta observada ni stock de cierre observado.
+
+| Escenario ilustrativo | Fecha | Indicador de feriado | Demanda estimada con versión 1 |
+| --- | --- | ---: | ---: |
+| Normal | 1 de octubre de 2026 | 0 | 38,982 |
+| Feriado | 9 de octubre de 2026 | 1 | 49,949 |
+
+Son muestras simuladas, no ventas observadas de esas fechas. Comparten valores
+históricos para ilustrar la función, pero también cambian la fecha y el calendario;
+la diferencia no puede atribuirse únicamente al feriado. No se calcula RMSE con
+estos casos porque no se dispone de su demanda real.
+
+### Explicación con SHAP
+
+Se aplica `shap.KernelExplainer` al pipeline completo, con 30 filas de entrenamiento
+como fondo, 300 muestras de aproximación por caso y semilla 42. El valor base es
+la predicción media sobre ese fondo. Los aportes positivos aumentan la predicción
+respecto a la base y los negativos la reducen. La suma de base y aportes debe
+coincidir con la salida de `predecir`, con tolerancia numérica de 1e-5.
+
+Cada figura muestra los 11 aportes de mayor magnitud y agrupa los 11 restantes.
+Los 22 aportes de cada caso se exportan a CSV y el notebook comenta los tres
+principales. SHAP explica al modelo respecto al fondo elegido; no demuestra
+causalidad. Las variables de calendario, rezagos y producto pueden estar
+relacionadas, por lo que los resultados deben leerse junto con esta limitación.
+La evaluación de calidad sigue siendo la prueba de septiembre de la Parte 2.
+
 ## Ejecución local
 
 Se necesita Python 3.12. Los comandos siguientes son para PowerShell en Windows
@@ -113,7 +199,7 @@ python -m venv .venv
 Abrir `practica2_svm.ipynb` en un editor compatible con Jupyter, seleccionar el
 Python de `.venv` como kernel y ejecutar las celdas en orden. La Parte 2 necesita
 las variables que crea la Parte 1; no se puede comenzar desde sus celdas con el
-kernel vacío. La Parte 3 sigue pendiente.
+kernel vacío. La Parte 3 utiliza el modelo registrado por la Parte 2.
 
 También se puede ejecutar todo el cuaderno desde la terminal:
 
@@ -124,6 +210,12 @@ También se puede ejecutar todo el cuaderno desde la terminal:
 Este comando vuelve a entrenar, actualiza las salidas del notebook y agrega nuevas
 ejecuciones y una nueva versión del modelo en MLflow. Para leer los resultados
 existentes basta con abrir el HTML; no es necesario repetir el entrenamiento.
+
+Para repetir solo la Parte 3 sin entrenar, en un kernel nuevo ejecutar la carga
+de librerías y datos al inicio de la Parte 1, la sección 1.1 de variables y la 1.2
+de división temporal. Después ejecutar 3.1 a 3.5, sin pasar por 1.3 a 1.6 ni por
+la Parte 2. Así se preparan los datos para los ejemplos y SHAP, pero se carga la
+versión que ya existe en el registro.
 
 ## Cómo consultar MLflow
 
@@ -155,27 +247,32 @@ instalar las dependencias y volver a ejecutar el cuaderno para crear su propio r
 
 | Archivo o carpeta | Contenido |
 | --- | --- |
-| `practica2_svm.ipynb` | Código, explicaciones y salidas de las Partes 1 y 2. |
+| `practica2_svm.ipynb` | Código, explicaciones y salidas de las tres partes. |
 | `practica2_svm.html` | Exportación del cuaderno con las salidas guardadas. |
 | `requirements.txt` | Dependencias para preparar el entorno. |
 | `data/` | Los dos CSV de entrada. |
 | `figuras/01_kernels.png` a `figuras/04_prediccion_vs_real.png` | Figuras de la Parte 1. |
 | `figuras/05_grid_vs_random.png` | Comparación de RMSE de agosto y tiempo de ambas búsquedas. |
+| `figuras/06_shap_normal.png` y `figuras/07_shap_feriado.png` | Aportes SHAP de los dos escenarios. |
 | `resultados/parte2_experimentos.csv` | Una fila por candidato, con parámetros, errores, tiempo y `run_id`. |
 | `resultados/parte2_comparacion.csv` | Resumen del mejor candidato de cada búsqueda. |
 | `resultados/parte2_modelo.json` | Datos para localizar el modelo y conocer su esquema de entrada. |
+| `resultados/parte3_predicciones.csv` | Fechas, producto, indicador de feriado, versión y predicciones de los dos casos. |
+| `resultados/parte3_muestras.csv` | Las dos muestras con sus 22 variables y etiqueta del caso. |
+| `resultados/parte3_shap.csv` | Los 44 aportes, con valor de entrada, base SHAP y predicción. |
 | `tests/test_parte2.py` | Pruebas de integración y de renderizado Markdown. |
+| `tests/test_parte3.py` | Carga por versión, validación, ausencia de reentrenamiento, escenarios y SHAP. |
 | `mlflow.db` y `mlartifacts/` | Metadatos de MLflow y archivos de modelos y figuras; se generan localmente. |
 | `.venv/` | Entorno de Python local; no se comparte ni se sube a Git. |
 
-## Entrega para la Parte 3
+## Modelo y versiones entre las tres partes
 
 `resultados/parte2_modelo.json` contiene nombre, versión, URI, columnas y métricas
 del modelo seleccionado. El registro se llama `svr_demanda` y guarda el pipeline
 completo, incluido el escalador. Una primera ejecución crea la versión 1;
 volver a ejecutar crea otra versión, sin sobrescribir las anteriores.
 
-El compañero debe tomar la versión y la URI que aparezcan en ese JSON, sin asumir
+La Parte 3 toma el nombre y la versión que aparecen en ese JSON, sin asumir
 que la versión siempre será 1. La muestra nueva debe respetar las 22 columnas
 indicadas en `columnas`, incluidos los rezagos y las columnas del producto. Una
 fecha sola no contiene todas las entradas que espera el modelo. El escalador ya
@@ -188,8 +285,8 @@ nuevo. Copiar el JSON no copia el modelo entrenado: solo contiene sus metadatos,
 y las rutas del registro actual corresponden a este equipo.
 
 Para compartir el proyecto se necesitan el notebook, los datos, las dependencias,
-este README y los resultados exportados. La función `predecir(muestra, version)`
-y la explicación con SHAP deben incorporarse en la Parte 3; no están implementadas.
+este README y los resultados exportados. El JSON de entrega no incluye los
+archivos del modelo; la Parte 3 necesita que su versión exista en MLflow.
 
 ## Comprobación y exportación
 
@@ -200,16 +297,21 @@ Desde la carpeta del proyecto:
 .\.venv\Scripts\python.exe -m nbconvert --to html practica2_svm.ipynb
 ```
 
-Las dos pruebas cubren lo siguiente:
+Las cinco pruebas cubren lo siguiente:
 
 - La integración ejecuta búsquedas con datos pequeños en un directorio temporal.
   Comprueba la separación temporal, parámetros, métricas y figuras de cada
   candidato, los archivos exportados y la carga de la versión 1. Verifica que el
-  pipeline cargado reproduzca las predicciones del entrenado y que no se haya
-  implementado la función de la Parte 3.
+  pipeline cargado reproduzca las predicciones del entrenado. La prueba de la
+  Parte 2 se detiene antes de la Parte 3 para comprobar ambas etapas por separado.
 - La prueba de Markdown renderiza todas las celdas de texto y comprueba que las
   negritas y el código en línea no queden como marcas visibles. También revisa
   las listas de conclusiones y referencias.
+- Las pruebas de la Parte 3 comprueban la existencia de la función y los ejemplos,
+  y ejecutan una integración con dos versiones registradas. Comprueban que elegir
+  otra versión cambia el modelo, que los datos inválidos se rechazan y que no se
+  llama a `fit` del SVR ni del escalador. También verifican los indicadores de
+  feriado, la reconstrucción SHAP, las figuras, los CSV y la integridad de los datos.
 
 La exportación a HTML usa las salidas que ya tiene el notebook; no vuelve a
 entrenar. Hay que ejecutarlo antes si se quieren publicar resultados nuevos.
@@ -225,9 +327,24 @@ Las pruebas pequeñas no sustituyen esa ejecución completa con los datos reales
 | El modelo aparece con versión 2 o superior | Es normal tras repetir el entrenamiento; consultar la versión actual en el JSON de entrega. |
 | Se ven asteriscos o comillas invertidas en el texto | Recargar el notebook actualizado y renderizar las celdas Markdown. Debe conservarse una línea en blanco entre cada cierre `</div>` y el texto Markdown siguiente. |
 
+### SQLAlchemy y Control de aplicaciones de Windows
+
+Si Windows bloquea una extensión nativa de SQLAlchemy, se puede instalar su
+variante oficial en Python puro. En este equipo se comprobó con SQLAlchemy 2.1.8:
+
+```powershell
+$env:DISABLE_SQLALCHEMY_CEXT = "1"
+.\.venv\Scripts\python.exe -m pip install --force-reinstall --no-deps --no-binary=sqlalchemy "SQLAlchemy==2.1.8"
+```
+
+Esta instalación afecta solo a `.venv` y evita usar las extensiones compiladas de
+SQLAlchemy; no cambia las políticas de seguridad de Windows. Reiniciar el kernel
+después de instalar. La opción corresponde al procedimiento oficial para
+[instalar SQLAlchemy sin extensiones Cython](https://docs.sqlalchemy.org/en/21/intro.html#building-the-cython-extensions).
+
 ## Referencia visual
 
 El notebook sigue el formato del [cuaderno de SVM de Remigio Hurtado](https://github.com/Remigiohurtadoins/MachineLearning-Engineering-Production-Portfolio/blob/main/14.SVM%20Fine%20Tuning%20-%20Loan%20approval%20-%20Financial%20Institution/SVM_OptimizacionConPipeline.ipynb):
 título entre bordes azules, encabezados gris oscuro, separadores naranjas e índice
-con enlaces. La redacción de la Parte 2 se revisó con Humanizer; los cálculos y los
-resultados guardados se conservaron.
+con enlaces. La redacción de las Partes 2 y 3 se revisó con Humanizer; los cálculos
+y resultados guardados de las dos primeras partes se conservaron.

@@ -1,0 +1,3 @@
+timestamp,dia_semana,mes,fin_de_semana,es_feriado,vispera_feriado,dia_pago,navidad,venta_ayer,venta_hace_7,media_7,stock_ayer,prod_103665,prod_105574,prod_108634,prod_108701,prod_114674,prod_119024,prod_121528,prod_123601,prod_126938,prod_135432,caso
+1790812800,3,10,0,0,0,0,0,38.0,36.0,41.857142857142854,102.0,1,0,0,0,0,0,0,0,0,0,normal
+1791504000,4,10,0,1,0,0,0,38.0,36.0,41.857142857142854,102.0,1,0,0,0,0,0,0,0,0,0,feriado
