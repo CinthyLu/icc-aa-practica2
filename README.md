@@ -5,6 +5,12 @@ El trabajo está en `practica2_svm.ipynb`; `practica2_svm.html` permite consulta
 resultados guardados sin ejecutar Python. Las tres partes del cuaderno están
 implementadas: modelo base, optimización y predicción con interpretación.
 
+## Contenido
+
+- [Parte 1: preparación de datos, SVR y evaluación](#parte1)
+- [Parte 2: optimización con MLflow](#parte2)
+- [Parte 3: predicción e interpretación con SHAP](#parte3)
+
 ## Estado del trabajo
 
 | Parte | Estado | Contenido |
@@ -17,6 +23,9 @@ implementadas: modelo base, optimización y predicción con interpretación.
 
 - [x] Reutilizar los datos de la práctica anterior y convertir la fecha en una variable numérica.
 - [x] Separar entrenamiento, validación de agosto y prueba de septiembre, sin barajar las fechas.
+- [x] Comparar los kernels lineal, RBF y polinomial en la Parte 1.
+- [x] Estudiar por separado C y épsilon, incluida la diferencia entre error de entrenamiento y validación.
+- [x] Evaluar el modelo base con RMSE y MAE y compararlo con las líneas base y la LSTM anterior.
 - [x] Ejecutar GridSearch con 42 combinaciones y RandomSearch con 20, usando la misma validación.
 - [x] Registrar en MLflow los parámetros, RMSE de entrenamiento y validación, tiempo de ajuste y figura de cada candidato.
 - [x] Comparar ambas búsquedas en una figura y exportar sus resultados a CSV.
@@ -26,6 +35,13 @@ implementadas: modelo base, optimización y predicción con interpretación.
 - [x] Probar dos escenarios, normal y feriado, con sus 22 variables preparadas.
 - [x] Explicar ambos resultados con SHAP y comprobar que los aportes reconstruyen las predicciones.
 - [x] Incorporar conclusiones, referencias de SHAP y exportaciones de la Parte 3.
+
+### Resultado guardado de la Parte 1
+
+El modelo base elegido es SVR RBF, con C = 10 y épsilon = 0,1. Obtiene RMSE 3,58
+en validación y, después del ajuste con entrenamiento y agosto, RMSE 3,21 y MAE
+2,29 en septiembre. Los pasos y las comparaciones están en la explicación de la
+Parte 1.
 
 ### Resultados guardados de la Parte 2
 
@@ -76,27 +92,96 @@ Después de elegir los parámetros se entrena el modelo final con entrenamiento 
 agosto, y se evalúa en septiembre. Ese error de prueba no se usa para seleccionar
 otra configuración.
 
+<a id="parte1"></a>
+
 ## Cómo funciona la Parte 1
 
-Primero se cargan los datos, se ordenan por producto y fecha y se calcula el stock
-de cierre. Se preparan las variables de calendario y los rezagos de ventas y
-stock. Los rezagos usan observaciones anteriores al día que se quiere predecir.
+Esta etapa prepara los datos y establece un modelo base antes de la búsqueda
+conjunta de la Parte 2. Sigue las secciones 1.1 a 1.6 del notebook.
 
-El modelo combina `StandardScaler` y `SVR` en un pipeline. Se comparan los kernels
-lineal, RBF y polinomial con C = 10. RBF obtiene RMSE de validación 3,58, frente a
-4,24 del lineal y 3,63 del polinomial. Después se estudian C y épsilon por separado:
+### 1.1 Variables de entrada
 
-| Parámetro | Valores probados en la Parte 1 |
-| --- | --- |
-| C | 0,1; 0,3; 1; 3; 10; 30; 100; 300; 1000 |
-| Épsilon | 0,1; 0,5; 1; 2; 4; 8 |
+Se cargan las ventas y el inventario, se ordenan las observaciones por producto
+y fecha y se calcula `stock_cierre` como stock inicial menos cantidad vendida.
+La función `crear_variables` prepara:
 
-La configuración elegida en esta etapa es RBF, C = 10 y épsilon = 0,1. Tras ajustar
-con entrenamiento y agosto, obtiene RMSE 3,21 y MAE 2,29 en septiembre. Se compara
-con las ventas del día anterior, las de la semana anterior y las métricas de la
-LSTM de la Práctica 1. La LSTM no se entrena en este notebook: sus métricas se
-incluyen como referencia. Las figuras muestran los kernels, el efecto de C y
-épsilon, y la comparación entre demanda real y predicha.
+- Fecha como timestamp, día de la semana, mes y fin de semana.
+- Feriados de Ecuador, vísperas de feriado, días de pago y periodo de Navidad.
+- Venta del día anterior, venta de hace siete días y media de las siete ventas anteriores.
+- Stock de cierre del día anterior y columnas indicadoras del producto.
+
+Los rezagos se calculan por producto y solo usan días anteriores. Se descartan
+las filas sin suficiente historial; quedan 3.580 muestras con 22 entradas. La
+salida que aprende el modelo es `cantidad_vendida`.
+
+### 1.2 División por fechas
+
+Se reservan 2.980 filas para entrenamiento, 300 del 2 al 31 de agosto de 2026
+para validación y 300 de septiembre para prueba. No se barajan las fechas.
+Durante la comparación de configuraciones, el escalador se ajusta únicamente
+con entrenamiento. Agosto se utiliza para medir el error de validación.
+
+### 1.3 Comparación de kernels
+
+Cada modelo combina `StandardScaler` y `SVR` en un pipeline. Se prueban los tres
+kernels con C = 10 y épsilon = 0,1:
+
+| Kernel | RMSE de entrenamiento | RMSE de validación |
+| --- | ---: | ---: |
+| Lineal | 3,88 | 4,24 |
+| RBF | 2,71 | 3,58 |
+| Polinomial, grado 3 | 2,66 | 3,63 |
+
+RBF obtiene el menor error de validación y se utiliza en los siguientes ajustes.
+La [figura de kernels](figuras/01_kernels.png) muestra los errores de ambos conjuntos.
+
+### 1.4 Efecto de C
+
+Se prueban C = 0,1; 0,3; 1; 3; 10; 30; 100; 300 y 1000. Con C = 0,1, el RMSE de
+validación es 8,02. El menor error se encuentra en C = 10, con RMSE 3,58. Con
+C = 1000, el error de entrenamiento baja a 1,98, pero el de validación sube a 4,45.
+Esa separación muestra el sobreajuste que se observa en este experimento.
+
+La [curva de C](figuras/02_curva_C.png) permite revisar este cambio sin utilizar
+el conjunto de prueba para elegir el parámetro.
+
+### 1.5 Efecto de épsilon
+
+Con C = 10 se prueban épsilon = 0,1; 0,5; 1; 2; 4 y 8. Se comparan el RMSE de
+validación y el porcentaje de vectores de soporte:
+
+- Épsilon = 0,1 obtiene el menor RMSE, 3,58, y utiliza el 95,87 % de las filas como vectores de soporte.
+- Épsilon = 2 obtiene RMSE 3,67 y utiliza el 41,74 %, con menos vectores de soporte y algo más de error.
+
+Se elige épsilon = 0,1 por su menor error. La [figura de épsilon](figuras/03_epsilon.png)
+muestra el compromiso entre error y cantidad de vectores de soporte.
+
+### 1.6 Evaluación del modelo base
+
+Una vez elegidos RBF, C = 10 y épsilon = 0,1, se ajusta el pipeline con
+entrenamiento y agosto. Después se calculan las métricas en septiembre:
+
+| Modelo o referencia | RMSE de prueba | MAE de prueba |
+| --- | ---: | ---: |
+| Venta del día anterior | 6,47 | 4,51 |
+| Venta del mismo día de la semana anterior | 4,39 | 3,29 |
+| LSTM de la Práctica 1 | 4,40 | 3,10 |
+| SVR RBF de la Parte 1 | 3,21 | 2,29 |
+
+Las métricas de la LSTM se toman de la práctica anterior; esa red no se entrena
+en este notebook. La [comparación de predicción y demanda real](figuras/04_prediccion_vs_real.png)
+muestra dos productos durante septiembre.
+
+También se calcula el stock de cierre estimado restando la demanda predicha al
+stock inicial y limitando el resultado a cero como mínimo. Su RMSE guardado es
+3,21. El SVR sigue aprendiendo demanda: no hay un segundo modelo entrenado
+directamente para stock.
+
+Estos son los resultados del modelo base. La Parte 2 busca combinaciones de
+parámetros de forma conjunta y registra sus experimentos y el modelo elegido en
+MLflow.
+
+<a id="parte2"></a>
 
 ## Cómo funciona la Parte 2
 
@@ -119,6 +204,8 @@ menor error. `rmse_train` y `rmse_val` corresponden al candidato entrenado sin
 agosto. El RMSE final de septiembre corresponde al modelo reajustado con
 entrenamiento y agosto. El tiempo de búsqueda incluye `fit`, pero deja fuera la
 creación de figuras y el registro en MLflow.
+
+<a id="parte3"></a>
 
 ## Cómo funciona la Parte 3
 
