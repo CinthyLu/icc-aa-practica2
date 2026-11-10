@@ -2,8 +2,8 @@
   "nombre": "svr_demanda",
   "version": 1,
   "modelo_uri": "models:/svr_demanda/1",
-  "tracking_uri": "sqlite:///C:/Users/kenny/OneDrive/Documents/icc-aa-practica2/icc-aa-practica2/mlflow.db",
-  "run_id": "635f2b575daf4cdcb898630917b2265b",
+  "tracking_uri": "sqlite:///mlflow.db",
+  "run_id": "5d74c71240e6496dbe95da3790d82bae",
   "busqueda": "GridSearch",
   "parametros": {
     "svr__C": 100,
@@ -36,6 +36,6 @@
     "prod_135432"
   ],
   "objetivo": "cantidad_vendida",
-  "rmse_val": 3.289710647310007,
-  "rmse_test": 3.0464016770414672
+  "rmse_val": 3.289710647310004,
+  "rmse_test": 3.04640167704147
 }

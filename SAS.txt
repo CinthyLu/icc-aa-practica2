@@ -1,0 +1,36 @@
+lmflow 
+revisar 
+ver las practicas y probar los diferentes modelos 
+EL Primero no debe ser un modelos tan bueno 
+finetunnign mostrar los ejemplos para desmostrar cual es como base y cual es el mejor modelo para el 
+cliente que se adapte a lo que busca 
+a la data real con la prediccion 
+esta semana vamos con el finitunnig 
+el objetivo de la practica es seguir un orden, vamos a poder hacer 
+
+
+random fotrest todavia no y no va la explicaion de prediciones 
+no va aun 
+
+conlcuisiones svm con red neuronal concurrente etc
+
+
+***para la evaluacion:***
+lunes evaluacion de evaluar la red
+4 bloques 
+1. carga de la data (el nos da la data y nosotros debemos saber como se hacepara prepararla y suburila)
+2 desarrollo de modelo
+3 evalucon 
+4 uso del modelo (para hacer predicciones reales )
+
+concluisones 
+overfiting undnerfiting 
+graficas
+
+que libreeria usamos compatible con mlflow
+los dos vectores 
+el modelo 
+demostrar la mejora con la svm origina y la optimizada 
+y la prediccion 
+ir en orden 
+
