@@ -5,36 +5,6 @@ Desarrollado por: Daniel Guanga, Alex Guamán y Cinthya Ramón · Docente: Ing. 
 
 Predicción de la demanda diaria de 10 productos (escenario sintético de La Favorita) con **SVR**, la SVM para regresión. El modelo parte de una versión base, se mejora con fine-tuning y cada prueba queda registrada en **MLflow**. El resultado se compara con la LSTM de la Práctica 1.
 
-## Documentación
-
-Este README contiene la explicación del trabajo, los resultados, los comandos
-de ejecución y las capturas de MLflow. En `docs/` se organizan las evidencias y
-el seguimiento:
-
-- [Estado de la práctica: trabajo terminado y pendientes](docs/estado.md).
-- [Capturas reales de MLflow](docs/capturas/mlflow/).
-
-## Estado actual
-
-El notebook actual contiene las Partes 1 y 2. La última ejecución completa, del
-12 de noviembre de 2026, terminó sus 15 celdas de código sin errores y actualizó
-el HTML, las figuras y los archivos de resultados.
-
-| Trabajo | Estado |
-| --- | --- |
-| Preparación de datos y evaluación del SVR de la Parte 1 | Hecho |
-| Registro del modelo base y el ajuste manual | Hecho |
-| GridSearch, RandomSearch y comparación de tiempo y error | Hecho |
-| Registro del mejor pipeline y sus versiones en MLflow | Hecho |
-| Comparación base, ajuste manual y fine-tuning con ejemplos por producto | Hecho |
-| Función para casos nuevos e interpretación con SHAP | No incluidas en el notebook actual |
-| Random Forest y ejercicio de árboles de decisión | Pendientes |
-
-MLflow conserva **132 ejecuciones terminadas**. La última ejecución añadió 67
-registros y mantuvo los 65 anteriores. El modelo vigente es
-`models:/svr_demanda/2`; la versión 1 sigue en el registro. Estos números describen
-el estado de esta ejecución y aumentarán cuando se repita el entrenamiento.
-
 ## Contenido de la carpeta
 
 | Archivo o carpeta | Contenido |
@@ -43,20 +13,45 @@ el estado de esta ejecución y aumentarán cuando se repita el entrenamiento.
 | `practica2_svm.html` | Cuaderno ejecutado, para verlo sin Python |
 | `data/` | `sales_history.csv` (ventas y stock diario) e `inventory.csv` (productos) |
 | `figuras/` | 7 figuras generadas por el cuaderno |
-| `docs/estado.md` | Trabajo terminado, comprobaciones y pendientes con sus evidencias |
 | `docs/capturas/mlflow/` | 3 capturas reales de la interfaz local de MLflow |
 | `resultados/` | CSV de los experimentos y datos del modelo registrado |
 | `requirements.txt` | Librerías necesarias |
 
 `mlflow.db` y `mlartifacts/` se crean al ejecutar el cuaderno y no se suben al repositorio.
 
-## Estructura del cuaderno
+## Parte 1: Datos y modelo SVR
 
-**Parte 1: Datos y SVR**
+La variable que aprende el modelo es `cantidad_vendida`, es decir, la demanda
+diaria de cada producto. Se usa regresión porque la salida es una cantidad,
+en lugar de una categoría. El stock de cierre se calcula a partir del stock
+disponible y las ventas; no es la variable objetivo del SVR.
+
+### Preparación y división temporal
+
 - 22 variables por fila: fecha como timestamp, calendario (día, mes, feriados de Ecuador, víspera, día de pago, Navidad), rezagos de venta, stock del día anterior y producto.
 - De las 3.650 filas originales quedan 3.580 después de retirar las que no tienen historial suficiente para calcular los rezagos.
 - División por fechas: 2.980 filas de entrenamiento hasta el 1 de agosto de 2026, 300 de validación del 2 al 31 de agosto y 300 de prueba en septiembre. No se barajan las fechas.
-- Comparación de kernels y efecto de C y épsilon (subajuste y sobreajuste).
+
+Los rezagos y la media móvil utilizan ventas de días anteriores de cada
+producto. Esto evita introducir la venta del mismo día entre sus propias
+entradas. La división temporal reproduce el orden del problema: aprender del
+pasado y evaluar fechas posteriores.
+
+### Kernels y ajuste manual
+
+El pipeline combina `StandardScaler` y `SVR`. El escalado evita que variables
+con magnitudes muy distintas, como el timestamp y los indicadores de producto,
+dominen el ajuste por su escala.
+
+| Parámetro | Qué controla |
+| --- | --- |
+| Kernel | La forma de la relación: lineal, RBF o polinomial |
+| C | La penalización de los errores fuera del margen; un valor mayor reduce la regularización |
+| Gamma | Un coeficiente de los kernels RBF y polinomial; en RBF controla el alcance de la influencia de las muestras. No interviene en el kernel lineal |
+| Épsilon | La anchura del margen dentro del cual el error no recibe penalización |
+
+Estas definiciones corresponden a los parámetros de
+[`SVR` de scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.svm.SVR.html).
 
 Se prueban los kernels lineal, RBF y polinomial con el mismo C. En validación,
 sus RMSE son 4,24; 3,58 y 3,63, respectivamente. Con RBF se estudian C y épsilon
@@ -65,11 +60,44 @@ entrenamiento y agosto antes de medir su resultado en septiembre: RMSE 3,21 y
 MAE 2,29. Las cuatro primeras figuras muestran estas comparaciones y las
 predicciones frente a las ventas reales de dos productos.
 
-**Parte 2: Fine-tuning con MLflow**
-- Modelo base: SVR lineal con valores por defecto.
-- GridSearch (42 combinaciones) y RandomSearch (20) sobre kernel, C, gamma y épsilon.
-- Registro del mejor pipeline completo, incluido el escalador, como `svr_demanda`. En la última ejecución se creó la versión 2.
-- Comparación base → ajuste manual → fine-tuning y ejemplos de real frente a predicción.
+El error de entrenamiento sirve para comprobar cuánto se ajusta el modelo a
+los datos que conoce. La elección se basa en validación: reducir solo el error
+de entrenamiento puede llevar a sobreajuste y empeorar las predicciones de
+fechas posteriores.
+
+## Parte 2: Optimización y registro con MLflow
+
+La optimización parte del SVR lineal por defecto y del ajuste manual de la
+Parte 1. GridSearch y RandomSearch prueban combinaciones de hiperparámetros
+para buscar un menor error de validación.
+
+### Qué es MLflow y para qué se usa aquí
+
+MLflow es una plataforma para gestionar experimentos y modelos. Su componente
+Tracking guarda los parámetros, las métricas y los archivos de cada prueba,
+y permite consultarlos en una interfaz web.
+[Documentación de MLflow Tracking](https://mlflow.org/docs/latest/ml/tracking/).
+
+| Concepto | Ejemplo en esta práctica |
+| --- | --- |
+| Experimento | `practica2_svr` agrupa las pruebas |
+| Run o ejecución | Un modelo base, una búsqueda o un candidato |
+| Parámetros | Kernel, C, gamma y épsilon utilizados |
+| Métricas | `rmse_train`, `rmse_val` y `tiempo_fit_s` |
+| Artefactos | Figuras, CSV y archivos del modelo entrenado |
+
+Con 62 candidatos entre ambas búsquedas, guardar solo el último resultado del
+notebook dificultaría identificar qué combinación produjo cada error. MLflow
+mantiene esa relación y el historial de las ejecuciones. Podemos comparar
+pruebas anteriores sin volver a entrenarlas y abrir la figura correspondiente
+a cada candidato.
+
+La mejora del RMSE procede del ajuste de hiperparámetros. MLflow registra la
+evidencia que permite comparar las alternativas; no modifica por sí solo las
+predicciones del SVR. En este proyecto funciona de forma local con SQLite y
+una carpeta de artefactos.
+
+### Cómo se realizan las búsquedas
 
 Ambas búsquedas utilizan la validación fija de agosto mediante `PredefinedSplit`.
 El escalador se ajusta dentro del pipeline con entrenamiento. El conjunto de
@@ -88,7 +116,42 @@ y con semilla 42. Se elige el menor RMSE de agosto; si hay empate entre búsqued
 se toma la de menor duración. Después se reajusta el modelo elegido con
 entrenamiento y agosto para la evaluación final en septiembre.
 
-## Resultados (prueba en septiembre de 2026)
+GridSearch recorre las 42 combinaciones definidas. RandomSearch evalúa una
+muestra de 20: necesita menos ajustes, aunque puede dejar fuera la mejor
+combinación de ese espacio. Cada candidato se registra como una ejecución
+hija de su búsqueda, con sus parámetros, RMSE de entrenamiento y validación,
+tiempo de ajuste y figura.
+
+### GridSearch frente a RandomSearch
+
+| Búsqueda | Candidatos | Mejor RMSE de agosto | Tiempo de búsqueda |
+| --- | ---: | ---: | ---: |
+| GridSearch | 42 | 3,290 | 52,51 s |
+| RandomSearch | 20 | 3,506 | 23,88 s |
+
+En esta ejecución elegimos GridSearch porque obtuvo el menor RMSE de agosto.
+RandomSearch tardó menos de la mitad y sería una alternativa si se priorizara
+reducir el tiempo de búsqueda aceptando un error mayor. Los presupuestos son
+distintos, 42 frente a 20 candidatos; el resultado no demuestra que GridSearch
+sea siempre mejor que RandomSearch.
+
+Los tiempos corresponden a `fit`; no incluyen guardar las figuras ni registrar
+los resultados en MLflow. Pueden cambiar según el equipo y la carga de trabajo.
+El archivo `resultados/parte2_comparacion.csv` conserva los valores de la última
+ejecución, y MLflow permite consultar las anteriores.
+
+![Comparación del RMSE de validación y el tiempo de GridSearch y RandomSearch](figuras/05_grid_vs_random.png)
+
+### Qué modelo se elige y por qué
+
+La combinación elegida es RBF, C = 100, gamma = 0,01 y épsilon = 1. Su RMSE
+de agosto es 3,2897, el menor encontrado por las dos búsquedas. Septiembre
+se utiliza después para evaluar el modelo reajustado, no para elegir estos
+parámetros.
+
+El RMSE penaliza más los errores grandes; el MAE resume la magnitud media
+del error absoluto. En ambos casos, un valor menor indica menos error.
+La evaluación de septiembre de 2026 es:
 
 | Modelo | RMSE | MAE |
 | --- | ---: | ---: |
@@ -97,25 +160,49 @@ entrenamiento y agosto para la evaluación final en septiembre.
 | **Fine-tuning: RBF, C = 100, γ = 0,01, ε = 1** | **3,05** | **2,21** |
 | LSTM (Práctica 1) | 4,40 | 3,10 |
 
-- GridSearch encontró el mejor modelo (RMSE de validación 3,29); RandomSearch tardó menos de la mitad, pero llegó a 3,51.
-- En septiembre, el desfase total entre lo pedido según el modelo y la demanda real baja de 127,5 (base) a 89,3 unidades/kg.
-- La SVR ajustada tiene 31 % menos error que la LSTM de la Práctica 1.
+El fine-tuning reduce el RMSE de prueba de 3,50 a 3,05 frente al modelo base,
+aproximadamente un 13 %. También mejora el ajuste manual, que obtuvo 3,21.
+El MAE baja de 2,50 a 2,21. Por estos resultados se conserva el SVR ajustado
+entre las alternativas evaluadas, no simplemente por tener un C mayor o por
+ser la versión más reciente.
+
+![Comparación del modelo base, el ajuste manual y el fine-tuning](figuras/06_base_vs_mejor.png)
 
 La LSTM no se entrena en este notebook: sus métricas se toman de la práctica
-anterior. La comparación corresponde a este conjunto sintético y no demuestra
-que una SVR siempre supere a una red recurrente.
+anterior y se incluyen como referencia. Frente al RMSE reportado de 4,40,
+el 3,05 del SVR es aproximadamente un 31 % menor. Esta comparación corresponde
+al escenario sintético de la práctica y no demuestra que una SVR siempre
+supere a una red recurrente.
 
-### Comparación de búsquedas de la última ejecución
+### Ejemplo de demanda mensual por producto
 
-| Búsqueda | Candidatos | Mejor RMSE de agosto | Tiempo de búsqueda |
-| --- | ---: | ---: | ---: |
-| GridSearch | 42 | 3,290 | 52,51 s |
-| RandomSearch | 20 | 3,506 | 23,88 s |
+El cuaderno suma las predicciones de septiembre por producto y las compara con
+las ventas reales del mes. La suma de las diferencias absolutas entre esos
+totales baja de 127,5 con el modelo base a 89,3 con el ajustado. Esto permite
+observar cómo cambia una estimación mensual de pedido al mejorar la predicción.
 
-Los tiempos corresponden a `fit`; no incluyen guardar las figuras ni registrar
-los resultados en MLflow. Pueden cambiar según el equipo y la carga de trabajo.
-El archivo `resultados/parte2_comparacion.csv` conserva los valores de la última
-ejecución, y MLflow permite consultar las anteriores.
+Es una simulación basada en demanda, no una política completa de inventario:
+no incorpora plazos de reposición ni stock de seguridad. Además, los productos
+usan unidades o kilogramos; ese total agregado debe interpretarse como una
+referencia del ejercicio y revisarse por producto.
+
+![Demanda real mensual y cantidades estimadas por producto en septiembre](figuras/07_cliente_real_vs_pred.png)
+
+### Registro y versiones del modelo
+
+El Model Registry organiza modelos por nombre y versión, y los relaciona con
+la ejecución de origen.
+[Documentación de MLflow Model Registry](https://mlflow.org/docs/latest/ml/model-registry/).
+
+Aquí se guarda el pipeline completo bajo el nombre `svr_demanda`, con el
+escalador y el SVR entrenados. Así se conserva la transformación de las entradas
+junto con el modelo. La firma describe sus 22 columnas de entrada y su salida.
+
+La primera ejecución creó la versión 1 y la siguiente añadió la versión 2 sin
+borrar la anterior. La referencia de esta ejecución es `models:/svr_demanda/2`.
+El archivo `resultados/parte2_modelo.json` conserva esa URI, los parámetros y
+las métricas. Una versión mayor identifica otro registro; por sí sola no
+significa que el modelo tenga menos error.
 
 ## Ejecución
 
@@ -188,7 +275,7 @@ ejecuciones; el registro permite consultar las versiones 1 y 2.
 ### Capturas reales de MLflow
 
 Capturas tomadas el 12 de noviembre de 2026 sobre la base local del proyecto.
-Documentan ese estado; no se actualizan solas al repetir el notebook.
+Muestran esa ejecución; no se actualizan solas al repetir el notebook.
 
 #### Historial de ejecuciones
 
@@ -217,16 +304,3 @@ La base `mlflow.db` y la carpeta `mlartifacts/` deben conservarse juntas para
 consultar los modelos y sus artefactos. No se suben a Git. El JSON de entrega
 describe el modelo, pero no contiene sus archivos entrenados. En otro equipo se
 debe preparar el entorno y ejecutar el notebook para crear su registro local.
-
-## Pendiente
-
-- Random Forest y explicación de predicciones, según el alcance que confirme el docente.
-- La función de predicción para muestras nuevas y SHAP no están en el notebook actual. No se consideran terminados en esta versión.
-- Ejercicio de árboles de decisión (Information Gain) de la guía.
-- Confirmar con el docente el enfoque: este modelo aprende demanda y después calcula stock; no predice stock directamente.
-- Revisar las referencias APA, confirmar los integrantes permitidos y realizar la entrega en AVAC y la sustentación.
-
-El [estado de la práctica](docs/estado.md) detalla qué se comprobó, qué falta
-implementar y qué requiere confirmación del docente. Las capturas y los archivos
-de resultados documentan una ejecución concreta; hay que revisarlos al incorporar
-nuevos cambios.
