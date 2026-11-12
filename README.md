@@ -14,10 +14,13 @@ Predicción de la demanda diaria de 10 productos (escenario sintético de La Fav
 | `data/` | `sales_history.csv` (ventas y stock diario) e `inventory.csv` (productos) |
 | `figuras/` | 7 figuras generadas por el cuaderno |
 | `docs/capturas/mlflow/` | 3 capturas reales de la interfaz local de MLflow |
+| `docs/mlflow/` | Copia compartida del historial de MLflow y sus artefactos |
 | `resultados/` | CSV de los experimentos y datos del modelo registrado |
 | `requirements.txt` | Librerías necesarias |
 
-`mlflow.db` y `mlartifacts/` se crean al ejecutar el cuaderno y no se suben al repositorio.
+`mlflow.db` y `mlartifacts/` se crean al ejecutar el cuaderno y permanecen locales.
+La copia de entrega de `docs/mlflow/` sí se incluye en Git para consultar el
+mismo historial desde otro equipo.
 
 ## Parte 1: Datos y modelo SVR
 
@@ -218,16 +221,44 @@ python -m venv .venv
 
 Si `.venv` ya está preparado, se puede pasar al siguiente paso.
 
-### 2. Iniciar la interfaz web de MLflow
+### 2. Abrir el historial compartido, sin entrenar
+
+Para abrir los experimentos compartidos sin ejecutar el notebook:
+
+```powershell
+.\.venv\Scripts\python.exe -m mlflow ui --backend-store-uri sqlite:///docs/mlflow/historial.sqlite --host 127.0.0.1 --port 5000
+```
+
+Entrar a [MLflow local](http://127.0.0.1:5000). La copia
+incluye las 132 ejecuciones y las versiones 1 y 2 de `svr_demanda`, con sus
+métricas, figuras y modelos entrenados. No requiere acceso a la computadora
+donde se realizaron los experimentos.
+
+MLflow abre directamente la base compartida. Las rutas de los artefactos son
+relativas: ejecutar el comando desde la raíz del repositorio y conservar toda
+la carpeta `docs/mlflow/`. No se necesita un script auxiliar. Dejar la terminal
+abierta; **Ctrl+C** detiene el servidor. Hacer `pull` descarga los archivos,
+pero no inicia MLflow automáticamente.
+
+Esta es una copia fija de la ejecución documentada, creada con MLflow 3.18.0
+y scikit-learn 1.9.1. Los entrenamientos posteriores se guardan en la base local,
+no se incorporan automáticamente a la copia compartida. Usar esta base para
+consulta: borrar ejecuciones o editar sus datos desde la interfaz puede
+modificar el archivo que se comparte por Git.
+
+### Consultar nuevos entrenamientos locales
+
+El notebook guarda sus nuevos experimentos en `mlflow.db` de la raíz. Para
+verlos, detener el servidor anterior e iniciar MLflow con esa base:
 
 ```powershell
 .\.venv\Scripts\python.exe -m mlflow ui --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
 ```
 
-Dejar esa terminal abierta y entrar a [MLflow local](http://127.0.0.1:5000).
-Si la página ya abre, el servidor está funcionando y no hace falta arrancarlo
-otra vez. `127.0.0.1` corresponde a este equipo; la interfaz no está publicada
-en internet.
+Ambos comandos usan el puerto 5000; ejecutar solo el que corresponda a la base
+que se quiere consultar. Si el puerto está ocupado, detener el servidor
+anterior o cambiar `--port` por otro, por ejemplo 5001, y abrir ese puerto.
+`127.0.0.1` corresponde a este equipo; la interfaz no está publicada en internet.
 
 ### 3. Ejecutar el notebook
 
@@ -300,7 +331,11 @@ y la URI vigentes se guardan en `resultados/parte2_modelo.json`.
 
 ![Detalle de la versión 2 de svr_demanda y su esquema de 22 entradas en MLflow](docs/capturas/mlflow/03_versiones_modelo.jpg)
 
-La base `mlflow.db` y la carpeta `mlartifacts/` deben conservarse juntas para
-consultar los modelos y sus artefactos. No se suben a Git. El JSON de entrega
-describe el modelo, pero no contiene sus archivos entrenados. En otro equipo se
-debe preparar el entorno y ejecutar el notebook para crear su registro local.
+La base local `mlflow.db` y `mlartifacts/` conservan los entrenamientos de cada
+equipo. La copia compartida contiene `docs/mlflow/historial.sqlite` y
+`docs/mlflow/artifacts/`; ambos deben incluirse al subir el proyecto a Git.
+El JSON de resultados describe el modelo, pero no sustituye esos archivos.
+Quien descargue el repositorio puede abrir el historial con el comando directo
+de MLflow, sin reentrenar. Para generar nuevos experimentos, debe ejecutar el
+notebook y consultar su base local con el segundo comando de la sección de
+ejecución.

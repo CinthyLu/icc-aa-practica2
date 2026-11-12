@@ -1,0 +1,41 @@
+{
+  "nombre": "svr_demanda",
+  "version": 1,
+  "modelo_uri": "models:/svr_demanda/1",
+  "tracking_uri": "sqlite:///docs/mlflow/historial.sqlite",
+  "run_id": "635f2b575daf4cdcb898630917b2265b",
+  "busqueda": "GridSearch",
+  "parametros": {
+    "svr__C": 100,
+    "svr__epsilon": 1,
+    "svr__gamma": 0.01,
+    "svr__kernel": "rbf"
+  },
+  "columnas": [
+    "timestamp",
+    "dia_semana",
+    "mes",
+    "fin_de_semana",
+    "es_feriado",
+    "vispera_feriado",
+    "dia_pago",
+    "navidad",
+    "venta_ayer",
+    "venta_hace_7",
+    "media_7",
+    "stock_ayer",
+    "prod_103665",
+    "prod_105574",
+    "prod_108634",
+    "prod_108701",
+    "prod_114674",
+    "prod_119024",
+    "prod_121528",
+    "prod_123601",
+    "prod_126938",
+    "prod_135432"
+  ],
+  "objetivo": "cantidad_vendida",
+  "rmse_val": 3.289710647310007,
+  "rmse_test": 3.0464016770414672
+}

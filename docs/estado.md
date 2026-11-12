@@ -76,6 +76,7 @@ que están ahora en el proyecto.
 | [Datos del modelo](../resultados/parte2_modelo.json) | Nombre, versión, URI, parámetros, columnas y métricas. |
 | [Figuras](../figuras/) | Las siete figuras generadas por el notebook. |
 | [MLflow local](http://127.0.0.1:5000/#/experiments/1) | Historial de ejecuciones, métricas, artefactos y acceso al registro. |
+| [Historial compartido](mlflow/README.md) | Copia portable de las 132 ejecuciones y dos versiones, para consultar después de hacer pull sin entrenar. |
 
 ### Historial de ejecuciones
 
@@ -99,3 +100,9 @@ volver a tomar las capturas; las imágenes no se regeneran al ejecutar el notebo
 El servidor de MLflow se inicia aparte y usa la base `mlflow.db` de la carpeta
 del proyecto. No hace falta volver a entrenar para consultar un historial
 existente. La base y `mlartifacts/` son locales y no se suben a Git.
+
+La copia de entrega está en `docs/mlflow/` y sí se comparte por Git. Se abre
+con el comando directo de MLflow indicado en su README, desde la raíz del
+repositorio. Usa rutas relativas y no necesita scripts auxiliares. Es
+independiente de la base local de entrenamiento; ambas pueden consultarse en
+el puerto 5000, iniciando un solo servidor con la base que se quiera revisar.
